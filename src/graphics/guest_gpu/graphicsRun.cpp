@@ -24,6 +24,7 @@
 #include <array>
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -547,6 +548,22 @@ void CommandProcessor::SuspendPm4() {
 	g_current_execution->m_suspended = true;
 }
 
+static bool IsGpuWorkOpcode(uint32_t opcode) {
+	switch (opcode) {
+		case Pm4::IT_DISPATCH_DIRECT:
+		case Pm4::IT_DISPATCH_INDIRECT:
+		case Pm4::IT_DRAW_INDIRECT:
+		case Pm4::IT_DRAW_INDEX_INDIRECT:
+		case Pm4::IT_DRAW_INDEX_2:
+		case Pm4::IT_DRAW_INDIRECT_MULTI:
+		case Pm4::IT_DRAW_INDEX_AUTO:
+		case Pm4::IT_DRAW_INDEX_OFFSET_2:
+		case Pm4::IT_DRAW_INDEX_INDIRECT_MULTI:
+		case Pm4::IT_DRAW_INDEX_MULTI_INST: return true;
+		default: return false;
+	}
+}
+
 void CommandProcessor::ProcessPm4(Pm4Execution& execution) {
 	const bool debug_dump = graphics_debug_dump_enabled();
 	while (!execution.m_buffer_stack.empty()) {
@@ -612,6 +629,18 @@ void CommandProcessor::ProcessPm4(Pm4Execution& execution) {
 		}
 		cursor.offset_dw += packet_dw;
 		execution.m_made_progress = true;
+		if (IsGpuWorkOpcode(opcode)) {
+			// Submit long recordings so the GPU runs alongside the CPU; a readback then waits
+			// only for the work recorded since the last submit. KYTY_FLUSH_US overrides the
+			// interval, and 0 submits only at the end of each guest submission.
+			static const uint64_t flush_us = [] {
+				const char* value = std::getenv("KYTY_FLUSH_US");
+				return value != nullptr ? std::strtoull(value, nullptr, 10) : 1000ull;
+			}();
+			if (flush_us != 0 && GetScheduler().RecordingLongerThan(flush_us)) {
+				BufferFlush();
+			}
+		}
 		if (!execution.m_next_buffer.empty()) {
 			// Chains and taken branches reuse the fetcher; only calls retain a return cursor.
 			if (execution.m_chain) {

@@ -7,6 +7,7 @@
 #include "graphics/host_gpu/renderer/masterSemaphore.h"
 #include "graphics/host_gpu/renderer/render.h"
 
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <queue>
@@ -42,6 +43,10 @@ public:
 	[[nodiscard]] static bool InDeferredOperation() noexcept;
 
 	[[nodiscard]] bool Active() const noexcept { return m_command.m_registers != nullptr; }
+	// Whether the open command buffer began recording more than `us` microseconds ago.
+	[[nodiscard]] bool RecordingLongerThan(uint64_t us) const noexcept {
+		return std::chrono::steady_clock::now() - m_command_begin >= std::chrono::microseconds(us);
+	}
 	void                           CheckActive() const;
 	CommandBuffer&                 Current();
 	[[nodiscard]] uint64_t         CurrentTick() const noexcept { return m_master.CurrentTick(); }
@@ -90,6 +95,7 @@ private:
 	GraphicContext&              m_graphics;
 	CommandPool                  m_command_pool;
 	CommandBuffer                m_command;
+	std::chrono::steady_clock::time_point m_command_begin = std::chrono::steady_clock::now();
 	DynamicState                 m_dynamic_state;
 	std::queue<PendingOperation> m_pending_operations;
 	std::queue<PendingOperation> m_priority_operations;
