@@ -455,6 +455,23 @@ RenderState RenderExecutor::AcquireRenderTargets(CommandBuffer& buffer, RenderCo
 	state.height                = std::numeric_limits<uint32_t>::max();
 	state.num_layers            = std::numeric_limits<uint32_t>::max();
 	state.num_color_attachments = 0;
+	// The guest description can be larger than the host view it resolves to. A render area past
+	// an attachment is invalid; NVIDIA faults (Xid 13 "ZT/CT Violation") and loses the device.
+	const auto clamp_to_host = [&state](const auto& image, const ImageViewInfo& view,
+	                                    const char* kind) {
+		const auto width  = std::max(image.backing.extent.width >> view.base_level, 1u);
+		const auto height = std::max(image.backing.extent.height >> view.base_level, 1u);
+		if (width >= state.width && height >= state.height) {
+			return;
+		}
+		static std::atomic_uint32_t logged = 0;
+		if (logged.fetch_add(1, std::memory_order_relaxed) < 16) {
+			std::printf("render area %ux%u exceeds host %s attachment %ux%u (mip %u), clamped\n",
+			            state.width, state.height, kind, width, height, view.base_level);
+		}
+		state.width  = std::min(state.width, width);
+		state.height = std::min(state.height, height);
+	};
 	for (uint32_t i = 0; i < color_count; i++) {
 		auto& target = colors[i];
 		EXIT_IF(!target.image_id);
@@ -474,6 +491,7 @@ RenderState RenderExecutor::AcquireRenderTargets(CommandBuffer& buffer, RenderCo
 		const auto extent       = target.Extent();
 		state.width             = std::min(state.width, extent.width);
 		state.height            = std::min(state.height, extent.height);
+		clamp_to_host(image, view, "color");
 		state.num_layers        = std::min(state.num_layers, view.layer_count);
 		state.num_color_attachments = std::max(state.num_color_attachments, target.target_slot + 1);
 		auto& attachment            = state.color_attachments[target.target_slot];
@@ -536,6 +554,7 @@ RenderState RenderExecutor::AcquireRenderTargets(CommandBuffer& buffer, RenderCo
 		              buffer.Handle());
 		state.width               = std::min(state.width, depth.desc.info.extent.width);
 		state.height              = std::min(state.height, depth.desc.info.extent.height);
+		clamp_to_host(image, view, "depth");
 		state.num_layers          = std::min(state.num_layers, view.layer_count);
 		const auto aspects        = ImageViewOps::DepthAspectMask(depth.desc.view_info.format);
 		auto&      attachment     = state.depth_stencil_attachment;
