@@ -294,6 +294,7 @@ void ConfigurationEditDialog::Init(const Configuration& info) {
 	m_ui->checkBox_readback_tiled->setChecked(info.readback_tiled_images);
 	m_ui->checkBox_sync_raw_image_buffers->setChecked(info.sync_raw_image_buffers);
 	m_ui->checkBox_lds_wave_sync->setChecked(info.lds_wave_sync_enabled);
+	m_ui->checkBox_relaxed_target_aliasing->setChecked(info.relaxed_target_aliasing);
 	m_ui->checkBox_tessellation->setChecked(info.tessellation_enabled);
 	m_ui->checkBox_occlusion_queries->setChecked(info.occlusion_queries_enabled);
 	m_ui->checkBox_shader_cache->setChecked(info.shader_cache_enabled);
@@ -532,6 +533,7 @@ static void UpdateInfo(Configuration& info, Ui::ConfigurationEditDialog& ui, boo
 	info.readback_tiled_images     = ui.checkBox_readback_tiled->isChecked();
 	info.sync_raw_image_buffers    = ui.checkBox_sync_raw_image_buffers->isChecked();
 	info.lds_wave_sync_enabled     = ui.checkBox_lds_wave_sync->isChecked();
+	info.relaxed_target_aliasing   = ui.checkBox_relaxed_target_aliasing->isChecked();
 	info.tessellation_enabled      = ui.checkBox_tessellation->isChecked();
 	info.occlusion_queries_enabled = ui.checkBox_occlusion_queries->isChecked();
 	info.shader_cache_enabled      = ui.checkBox_shader_cache->isChecked();

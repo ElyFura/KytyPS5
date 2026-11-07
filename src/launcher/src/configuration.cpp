@@ -35,6 +35,7 @@ QVariantMap Configuration::GameSettings() const {
 	KYTY_CFG_SET(readback_tiled_images);
 	KYTY_CFG_SET(sync_raw_image_buffers);
 	KYTY_CFG_SET(lds_wave_sync_enabled);
+	KYTY_CFG_SET(relaxed_target_aliasing);
 	KYTY_CFG_SET(tessellation_enabled);
 	KYTY_CFG_SET(occlusion_queries_enabled);
 	KYTY_CFG_SET(shader_cache_enabled);
@@ -91,6 +92,7 @@ void Configuration::ReadGameSettingsValues(const Settings& s) {
 	KYTY_CFG_GET(readback_linear_images);
 	KYTY_CFG_GET(readback_tiled_images);
 	KYTY_CFG_GET(sync_raw_image_buffers);
+	KYTY_CFG_GET(relaxed_target_aliasing);
 	// Default on for settings saved before the option existed.
 	lds_wave_sync_enabled = s.value("lds_wave_sync_enabled", lds_wave_sync_enabled).toBool();
 	KYTY_CFG_GET(tessellation_enabled);

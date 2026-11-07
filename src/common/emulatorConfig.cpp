@@ -213,6 +213,10 @@ bool LdsWaveSyncEnabled() {
 	return g_config->lds_wave_sync_enabled;
 }
 
+bool RelaxedTargetAliasingEnabled() {
+	return g_config->relaxed_target_aliasing;
+}
+
 bool TessellationEnabled() {
 	return g_config->tessellation_enabled;
 }

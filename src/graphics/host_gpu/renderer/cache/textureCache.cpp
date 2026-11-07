@@ -1825,11 +1825,20 @@ bool TextureCache::DownloadImageMemory(ImageId id) {
 	return true;
 }
 
-void TextureCache::InvalidateMemoryFromGPU(uint64_t address, uint64_t size) {
+void TextureCache::InvalidateMemoryFromGPU(uint64_t address, uint64_t size, bool shader_write) {
 	std::scoped_lock lock {m_lock};
+	const bool relaxed_targets = shader_write && Config::RelaxedTargetAliasingEnabled();
 	for (const auto id: FindImagesInRegion(address, size)) {
 		auto& image = m_slot_images[id];
 		if (image.info.data.address != address) {
+			continue;
+		}
+		// Some games reuse render-target memory as compute scratch space of another size. Keeping
+		// the target there avoids rebuilding it from the buffer on every reuse; a buffer exactly
+		// the target's size still counts as a write to the target.
+		const auto binding = UploadBinding(image);
+		if (relaxed_targets && size != image.info.data.size &&
+		    (binding == BindingType::RenderTarget || binding == BindingType::DepthTarget)) {
 			continue;
 		}
 		image.ClearGpuModified();

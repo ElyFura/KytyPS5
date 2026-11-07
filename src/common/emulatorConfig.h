@@ -91,6 +91,8 @@ struct ConfigOptions {
 	bool                   sync_raw_image_buffers      = false;
 	// Execution barriers between dependent LDS accesses of one emulated wave (see Spirv::Profile).
 	bool                   lds_wave_sync_enabled       = true;
+	// Shader buffer writes that only alias a render target's base address keep the target.
+	bool                   relaxed_target_aliasing     = false;
 	bool                   tessellation_enabled        = false;
 	bool                   occlusion_queries_enabled   = false;
 	bool                   lod_stats_enabled           = false;
@@ -164,6 +166,7 @@ bool ReadbackLinearImagesEnabled();
 bool ReadbackTiledImagesEnabled();
 bool SyncRawImageBuffersEnabled();
 bool LdsWaveSyncEnabled();
+bool RelaxedTargetAliasingEnabled();
 bool TessellationEnabled();
 bool OcclusionQueriesEnabled();
 bool LodStatsEnabled();
