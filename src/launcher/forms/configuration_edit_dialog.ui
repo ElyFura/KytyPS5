@@ -544,9 +544,9 @@ Fixes flickering tile artifacts (NHL 26). Disable only to compare performance.</
           </item>
           <item>
            <widget class="QCheckBox" name="checkBox_relaxed_target_aliasing">
-            <property name="toolTip"><string>Keeps render targets when a compute shader writes a larger or smaller buffer at the same address.
+            <property name="toolTip"><string>Skips rebuilding a render target from compute scratch data (a larger or smaller buffer at the same address) before drawing into it again.
 Large speedup in games that reuse render-target memory as scratch space (NHL 26).
-May cause rendering errors in games that read such writes through the render target.</string></property>
+May cause rendering errors in games that blend onto such scratch data.</string></property>
             <property name="text"><string>Relaxed render-target aliasing (faster)</string></property>
            </widget>
           </item>

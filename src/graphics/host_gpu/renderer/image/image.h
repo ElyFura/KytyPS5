@@ -101,9 +101,20 @@ public:
 	[[nodiscard]] bool IsBufferModified() const noexcept { return m_buffer_modified; }
 	void               MarkBufferModified() noexcept {
 		m_buffer_modified = true;
+		m_scratch_aliased = false;
 		HeapChanged();
 	}
-	void               ClearBufferModified() noexcept { m_buffer_modified = false; }
+	void               ClearBufferModified() noexcept {
+		m_buffer_modified = false;
+		m_scratch_aliased = false;
+	}
+	// The buffer write that left the image stale used the memory as scratch space of another size;
+	// binding the image as a target can then skip rebuilding it (relaxed_target_aliasing).
+	void MarkScratchAliased() noexcept {
+		MarkBufferModified();
+		m_scratch_aliased = true;
+	}
+	[[nodiscard]] bool IsScratchAliased() const noexcept { return m_scratch_aliased; }
 
 	[[nodiscard]] bool Overlaps(uint64_t address, uint64_t size) const noexcept {
 		return info.data.address < address + size && address < info.data.End();
@@ -168,6 +179,7 @@ private:
 	bool              m_maybe_cpu_dirty = false;
 	bool              m_gpu_modified    = false;
 	bool              m_buffer_modified = false;
+	bool              m_scratch_aliased = false;
 };
 
 namespace ImageOps {

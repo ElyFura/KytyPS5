@@ -1415,6 +1415,14 @@ vk::ImageView TextureCache::FindTexture(ImageId id, const ImageDesc& desc) {
 	return image.FindView(desc.view_info);
 }
 
+// A target whose memory was last used as compute scratch space (relaxed_target_aliasing) is
+// drawn into again without first rebuilding it from that scratch data.
+static void SkipScratchAliasRefresh(Image& image) {
+	if (image.IsScratchAliased() && !image.IsCpuDirty()) {
+		image.ClearBufferModified();
+	}
+}
+
 vk::ImageView TextureCache::FindRenderTarget(ImageId id, const ImageDesc& desc) {
 	std::scoped_lock lock {m_lock};
 	auto&            image = m_slot_images[id];
@@ -1423,6 +1431,7 @@ vk::ImageView TextureCache::FindRenderTarget(ImageId id, const ImageDesc& desc) 
 	}
 	TouchImage(image);
 	image.usage.render_target = true;
+	SkipScratchAliasRefresh(image);
 	RefreshImage(id);
 	CommitGpuWrite(image);
 	TrackImageDownload(id, image);
@@ -1456,6 +1465,7 @@ vk::ImageView TextureCache::FindDepthTarget(ImageId id, const ImageDesc& desc) {
 			metadata->second.clear_mask.set();
 		}
 	}
+	SkipScratchAliasRefresh(image);
 	RefreshImage(id);
 	CommitGpuWrite(image);
 	if (desc.info.HasStencil()) {
@@ -1833,12 +1843,14 @@ void TextureCache::InvalidateMemoryFromGPU(uint64_t address, uint64_t size, bool
 		if (image.info.data.address != address) {
 			continue;
 		}
-		// Some games reuse render-target memory as compute scratch space of another size. Keeping
-		// the target there avoids rebuilding it from the buffer on every reuse; a buffer exactly
-		// the target's size still counts as a write to the target.
+		// Some games reuse render-target memory as compute scratch space of another size. The
+		// buffer still owns the memory, but the next target binding need not rebuild the image
+		// the game draws into; a buffer exactly the target's size counts as a write to the target.
 		const auto binding = UploadBinding(image);
 		if (relaxed_targets && size != image.info.data.size &&
 		    (binding == BindingType::RenderTarget || binding == BindingType::DepthTarget)) {
+			image.ClearGpuModified();
+			image.MarkScratchAliased();
 			continue;
 		}
 		image.ClearGpuModified();
