@@ -427,6 +427,9 @@ TestCase TrinityStack(u32 wave_size, u32 capacity, bool storage = false) {
   test.compute_info.lds_storage = storage;
   test.has_compute_info = true;
   test.decoded_counts = {{"DS_BVH_STACK_PUSH8_POP1_RTN_B32", 1}};
+  // The stack itself needs no barrier. The lane-private ds_write/ds_read around it would get
+  // a conservative wave barrier, which this check is not about.
+  test.profile = &NoLdsWaveSyncProfile;
   test.forbidden_spirv = {"OpControlBarrier", "OpMemoryBarrier", "get_bda_pointer"};
   return test;
 }

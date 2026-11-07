@@ -271,6 +271,7 @@ static QStringList CreateEmulatorArgs(const Configuration& info) {
 	AddFlag(args, info.readback_linear_images, "--readback-linear-images");
 	AddFlag(args, info.readback_tiled_images, "--readback-tiled-images");
 	AddFlag(args, info.sync_raw_image_buffers, "--sync-raw-image-buffers");
+	AddFlag(args, !info.lds_wave_sync_enabled, "--no-lds-wave-sync");
 	AddFlag(args, !info.trophy_enabled, "--no-trophy-notifications");
 	args << "--trophy-duration" << QString::number(info.trophy_duration_seconds);
 	AddFlag(args, info.perf_overlay_enabled, "--perf-overlay");

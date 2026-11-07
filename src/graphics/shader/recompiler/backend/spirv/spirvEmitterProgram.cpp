@@ -292,12 +292,163 @@ void EmitDispatcherInstruction(ValueEmitContext& ctx, const DispatcherFunctionSt
 	}
 }
 
+// Lanes of a guest wave execute each LDS instruction together and in program order, so guest
+// code exchanges data between lanes through LDS without s_barrier. Host invocations of one
+// emulated wave give no such guarantee (independent thread scheduling, compiler reordering).
+enum LdsAccess : uint8_t {
+	LdsNone   = 0,
+	LdsRead   = 1,
+	LdsWrite  = 2,
+	LdsAtomic = 4,
+};
+
+uint8_t LdsAccessOf(const EmitterState& state, const IR::Inst& inst) {
+	using Op = IR::ValueOpcode;
+	uint8_t access = LdsNone;
+	switch (inst.GetOpcode()) {
+		case Op::LoadSharedU8:
+		case Op::LoadSharedU16:
+		case Op::LoadSharedU32:
+		case Op::LoadSharedU32x2:
+		case Op::LoadSharedU32x3:
+		case Op::LoadSharedU32x4: access = LdsRead; break;
+		case Op::WriteSharedU8:
+		case Op::WriteSharedU16:
+		case Op::WriteSharedU32:
+		case Op::WriteSharedU32x2:
+		case Op::WriteSharedU32x3:
+		case Op::WriteSharedU32x4: access = LdsWrite; break;
+		case Op::SharedAtomicFMin32:
+		case Op::SharedAtomicFMax32:
+		case Op::SharedAtomicSwap32:
+		case Op::SharedAtomicIAdd32:
+		case Op::SharedAtomicIAdd64:
+		case Op::SharedAtomicISub32:
+		case Op::SharedAtomicInc32:
+		case Op::SharedAtomicDec32:
+		case Op::SharedAtomicSMin32:
+		case Op::SharedAtomicUMin32:
+		case Op::SharedAtomicSMax32:
+		case Op::SharedAtomicUMax32:
+		case Op::SharedAtomicUMax64:
+		case Op::SharedAtomicCmpSwap32:
+		case Op::SharedAtomicCmpSwap64:
+		case Op::SharedAtomicAnd32:
+		case Op::SharedAtomicOr32:
+		case Op::SharedAtomicOr64:
+		case Op::SharedAtomicXor32:
+		case Op::SharedAtomicMaskedOr32:
+		case Op::DataAppend:
+		case Op::DataConsume: access = LdsAtomic; break;
+		default: return LdsNone;
+	}
+	const auto& memory = state.program.memory_info.at(inst.Flags<IR::MemoryFlags>().index);
+	return memory.kind == IR::ResourceKind::Lds ? access : LdsNone;
+}
+
+// Earlier accesses that another lane's `access` must not overtake. Atomics on one address are
+// ordered by the hardware, and reads never disturb each other.
+uint8_t LdsConflicts(uint8_t access) {
+	switch (access) {
+		case LdsRead: return LdsWrite | LdsAtomic;
+		case LdsWrite: return LdsRead | LdsWrite | LdsAtomic;
+		case LdsAtomic: return LdsRead | LdsWrite;
+		default: return LdsNone;
+	}
+}
+
+bool LdsWaveSyncApplies(const EmitterState& state) {
+	if (!state.profile.lds_wave_sync || !state.program.info.uses_lds ||
+	    state.lds_storage_class == spv::StorageClassFunction) {
+		return false;
+	}
+	// Only compute and mesh invocations share LDS. A host subgroup holding several guest waves
+	// may split between them at a scalar branch, where a subgroup barrier would be undefined.
+	const auto* workgroup = ShaderWorkgroupInput(state.program.stage, state.input_info);
+	return workgroup != nullptr && workgroup->host_subgroup_size <= state.program.wave_size;
+}
+
+// Marks each LDS access that follows a conflicting access of the same wave with no barrier in
+// between. IR blocks follow the guest's scalar control flow, which is uniform across the wave,
+// and the barrier is emitted before the access's EXEC guard, so every lane reaches it.
+std::unordered_set<const IR::Inst*> FindLdsWaveSyncPoints(const EmitterState& state) {
+	std::unordered_set<const IR::Inst*> points;
+	if (!LdsWaveSyncApplies(state)) {
+		return points;
+	}
+	const auto& blocks = state.program.blocks;
+	std::unordered_map<const IR::Block*, uint8_t> pending_in;
+	std::unordered_map<const IR::Block*, uint8_t> pending_out;
+	// Returns the accesses still pending at the block's end.
+	const auto transfer = [&](const IR::Block* block, uint8_t pending, bool mark) {
+		std::optional<uint32_t> last_pc;
+		for (const auto& inst: *block) {
+			if (inst.GetOpcode() == IR::ValueOpcode::Barrier) {
+				pending = LdsNone;
+				last_pc.reset();
+				continue;
+			}
+			const auto access = LdsAccessOf(state, inst);
+			if (access == LdsNone) {
+				continue;
+			}
+			// One guest instruction may become several IR accesses; its lanes run together.
+			const auto pc = inst.Flags<IR::MemoryFlags>().pc;
+			if (last_pc != pc && (pending & LdsConflicts(access)) != 0) {
+				if (mark) {
+					points.insert(&inst);
+				}
+				pending = LdsNone;
+			}
+			pending |= access;
+			last_pc = pc;
+		}
+		return pending;
+	};
+	// The pending sets only grow, so this terminates; joining more than the exact predecessor
+	// state can only add barriers.
+	for (bool changed = true; changed;) {
+		changed = false;
+		for (const auto* block: blocks) {
+			uint8_t in = pending_in[block];
+			for (const auto* predecessor: block->ImmPredecessors()) {
+				in |= pending_out[predecessor];
+			}
+			pending_in[block] = in;
+			const auto out    = static_cast<uint8_t>(transfer(block, in, false) | pending_out[block]);
+			if (out != pending_out[block]) {
+				pending_out[block] = out;
+				changed            = true;
+			}
+		}
+	}
+	for (const auto* block: blocks) {
+		transfer(block, pending_in[block], true);
+	}
+	return points;
+}
+
+void EmitLdsWaveBarrier(EmitterState& state) {
+	const auto memory = state.lds_storage_class == spv::StorageClassStorageBuffer
+	                        ? spv::MemorySemanticsUniformMemoryMask
+	                        : spv::MemorySemanticsWorkgroupMemoryMask;
+	// Subgroup execution scope: one host subgroup is one guest wave, and other waves of the
+	// workgroup may take a different scalar path.
+	state.builder.AddFunction(
+	    spv::OpControlBarrier, ConstantU32(state, spv::ScopeSubgroup),
+	    ConstantU32(state, spv::ScopeWorkgroup),
+	    ConstantU32(state, spv::MemorySemanticsAcquireReleaseMask | memory));
+}
+
 template <typename EmitInstruction>
 void EmitBlock(ValueEmitContext& ctx, const IR::Block* block, EmitInstruction&& emit_instruction) {
 	ctx.state.current_block = block;
 	EmitLabel(ctx.state, block->Definition());
 	bool emitted_non_phi = false;
 	for (const auto& inst: *block) {
+		if (ctx.state.lds_wave_sync_points.contains(&inst)) {
+			EmitLdsWaveBarrier(ctx.state);
+		}
 		if (inst.GetOpcode() == IR::ValueOpcode::Phi) {
 			if (emitted_non_phi) {
 				ctx.Fail(inst, "appears after a non-Phi instruction");
@@ -750,6 +901,7 @@ void EmitProgram(EmitterState& state) {
 		                                     ConstantU32(state, LdsDwordCount(state)));
 	}
 	EmitMemoryBindings(state);
+	state.lds_wave_sync_points = FindLdsWaveSyncPoints(state);
 	if (program.blocks.empty()) {
 		EmitReturn(ctx);
 	} else if (state.program.dispatcher_fallback) {

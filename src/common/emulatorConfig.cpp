@@ -209,6 +209,10 @@ bool SyncRawImageBuffersEnabled() {
 	return g_config->sync_raw_image_buffers;
 }
 
+bool LdsWaveSyncEnabled() {
+	return g_config->lds_wave_sync_enabled;
+}
+
 bool TessellationEnabled() {
 	return g_config->tessellation_enabled;
 }

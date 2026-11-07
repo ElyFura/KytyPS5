@@ -534,6 +534,14 @@
             <property name="text"><string>Accurate texture synchronization</string></property>
            </widget>
           </item>
+          <item>
+           <widget class="QCheckBox" name="checkBox_lds_wave_sync">
+            <property name="toolTip"><string>Synchronizes shared-memory (LDS) exchange between the lanes of an emulated wave.
+Fixes flickering tile artifacts (NHL 26). Disable only to compare performance.</string></property>
+            <property name="text"><string>Synchronize LDS within waves</string></property>
+            <property name="checked"><bool>true</bool></property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

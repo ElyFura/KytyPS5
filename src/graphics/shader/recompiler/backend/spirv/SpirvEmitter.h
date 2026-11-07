@@ -20,6 +20,9 @@ struct Profile {
 	// 8 and 8_8 sRGB textures sample through sRGB views; without one the shader decodes them.
 	bool r8_srgb_views   = false;
 	bool r8g8_srgb_views = false;
+	// Guest waves run in lockstep, so their lanes exchange LDS data without s_barrier. Host
+	// invocations do not: put a subgroup execution barrier between dependent LDS accesses.
+	bool lds_wave_sync = true;
 };
 
 inline constexpr Profile DefaultProfile {};

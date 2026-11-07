@@ -118,6 +118,7 @@ public:
 	bool                   readback_linear_images      = false;
 	bool                   readback_tiled_images       = false;
 	bool                   sync_raw_image_buffers      = false;
+	bool                   lds_wave_sync_enabled       = true;
 	bool                   tessellation_enabled        = false;
 	bool                   occlusion_queries_enabled   = false;
 	bool                   shader_cache_enabled        = true;
@@ -163,6 +164,7 @@ public:
 		readback_linear_images      = other.readback_linear_images;
 		readback_tiled_images       = other.readback_tiled_images;
 		sync_raw_image_buffers      = other.sync_raw_image_buffers;
+		lds_wave_sync_enabled       = other.lds_wave_sync_enabled;
 		tessellation_enabled        = other.tessellation_enabled;
 		occlusion_queries_enabled   = other.occlusion_queries_enabled;
 		shader_cache_enabled        = other.shader_cache_enabled;

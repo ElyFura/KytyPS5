@@ -1384,6 +1384,7 @@ using ShaderProfile = ShaderRecompiler::Spirv::Profile;
 constexpr ShaderProfile Maintenance8Profile{.maintenance8 = true};
 constexpr ShaderProfile SrgbViewProfile{
     .maintenance8 = true, .r8_srgb_views = true, .r8g8_srgb_views = true};
+constexpr ShaderProfile NoLdsWaveSyncProfile{.maintenance8 = true, .lds_wave_sync = false};
 
 struct TestCase {
   const char *name = "";
@@ -39526,6 +39527,51 @@ TestCase DsPermuteWave64UsesIndependentHalves() {
   return test;
 }
 
+// One wave exchanges data through LDS without s_barrier, relying on lockstep execution: each
+// lane writes its slot, then reads the slot of lane ^ 33 (other half, other host invocation).
+TestCase DsWave64LockstepExchange(bool sync) {
+  using O = ShaderOpcode;
+
+  std::vector<u32> code;
+  AppendVMovU32(&code, 9, 100);
+  code.push_back(EncodeVop2(0x25, 2, Vgpr(0), 9));             // v2 = lane + 100
+  code.push_back(EncodeVop2(0x1a, 1, InlineU32(2), 0));        // v1 = lane * 4
+  code.push_back(EncodeDs0(0x0d));
+  code.push_back(EncodeDs1(0, 2, 1));                          // ds_write_b32 v1, v2
+  code.push_back(EncodeVop2(0x1d, 3, InlineU32(33), 0));       // v3 = lane ^ 33
+  code.push_back(EncodeVop2(0x1a, 3, InlineU32(2), 3));        // v3 *= 4
+  code.push_back(EncodeDs0(0x36));
+  code.push_back(EncodeDs1(4, 0, 3));                          // ds_read_b32 v4, v3
+  AppendStoreVgprAtLaneDwordOffset(&code, 4, 0, 0);
+  AppendEnd(&code);
+
+  TestCase test;
+  test.name = sync ? "DsWave64LockstepExchangeSynchronized" : "DsWave64LockstepExchangeUnsynced";
+  test.code = code;
+  test.initial = std::vector<u32>(64, 0);
+  for (u32 lane = 0; lane < 64; ++lane) {
+    test.expected.push_back(100 + (lane ^ 33));
+  }
+  test.opcodes = {O::V_MOV_B32, O::V_ADD_NC_U32, O::V_LSHLREV_B32, O::DS_WRITE_B32,
+                  O::V_XOR_B32, O::DS_READ_B32, O::BUFFER_STORE_DWORD, O::S_ENDPGM};
+  if (sync) {
+    // Subgroup execution, workgroup memory, AcquireRelease | WorkgroupMemory.
+    test.required_spirv = {"OpControlBarrier %uint_3 %uint_2 %uint_264"};
+  } else {
+    // Without the barrier the result races, so only the SPIR-V is checked.
+    test.profile = &NoLdsWaveSyncProfile;
+    test.forbidden_spirv = {"OpControlBarrier"};
+    test.compile_only = true;
+  }
+  test.compute_info.threads_num[0] = 64;
+  test.compute_info.threads_num[1] = 1;
+  test.compute_info.threads_num[2] = 1;
+  test.compute_info.wave_size = 64;
+  test.compute_info.thread_ids_num = 1;
+  test.has_compute_info = true;
+  return test;
+}
+
 TestCase DsBpermuteCapturedExecOffsetAndWrap() {
   using O = ShaderOpcode;
 
@@ -48152,6 +48198,8 @@ std::vector<TestCase> MakeCases() {
   AddCase(DsSwizzleInvalidSourceLaneZero);
   AddCase(DsPermuteCapturedExecOffsetAndWrap);
   AddCase(DsPermuteWave64UsesIndependentHalves);
+  AddCase([] { return DsWave64LockstepExchange(true); });
+  AddCase([] { return DsWave64LockstepExchange(false); });
   AddCase(DsBpermuteCapturedExecOffsetAndWrap);
   AddCase(DsBpermuteWave64UsesIndependentHalves);
   AddCase(Wave64CrossHalfLaneAndLds);
