@@ -93,6 +93,8 @@ struct ConfigOptions {
 	bool                   lds_wave_sync_enabled       = true;
 	// Shader buffer writes that only alias a render target's base address keep the target.
 	bool                   relaxed_target_aliasing     = false;
+	// Reports a 1080p video output to titles that do not request output-resolution detection.
+	bool                   report_1080p_output         = false;
 	bool                   tessellation_enabled        = false;
 	bool                   occlusion_queries_enabled   = false;
 	bool                   lod_stats_enabled           = false;
@@ -167,6 +169,7 @@ bool ReadbackTiledImagesEnabled();
 bool SyncRawImageBuffersEnabled();
 bool LdsWaveSyncEnabled();
 bool RelaxedTargetAliasingEnabled();
+bool Report1080pOutputEnabled();
 bool TessellationEnabled();
 bool OcclusionQueriesEnabled();
 bool LodStatsEnabled();

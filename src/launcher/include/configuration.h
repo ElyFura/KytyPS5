@@ -120,6 +120,7 @@ public:
 	bool                   sync_raw_image_buffers      = false;
 	bool                   lds_wave_sync_enabled       = true;
 	bool                   relaxed_target_aliasing     = false;
+	bool                   report_1080p_output         = false;
 	bool                   tessellation_enabled        = false;
 	bool                   occlusion_queries_enabled   = false;
 	bool                   shader_cache_enabled        = true;
@@ -167,6 +168,7 @@ public:
 		sync_raw_image_buffers      = other.sync_raw_image_buffers;
 		lds_wave_sync_enabled       = other.lds_wave_sync_enabled;
 		relaxed_target_aliasing     = other.relaxed_target_aliasing;
+		report_1080p_output         = other.report_1080p_output;
 		tessellation_enabled        = other.tessellation_enabled;
 		occlusion_queries_enabled   = other.occlusion_queries_enabled;
 		shader_cache_enabled        = other.shader_cache_enabled;

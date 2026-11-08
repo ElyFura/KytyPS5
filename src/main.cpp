@@ -209,6 +209,7 @@ static constexpr Flag FLAGS[] = {
     {"--sync-raw-image-buffers", &ConfigOptions::sync_raw_image_buffers},
     {"--no-lds-wave-sync", &ConfigOptions::lds_wave_sync_enabled, false},
     {"--relaxed-target-aliasing", &ConfigOptions::relaxed_target_aliasing},
+    {"--report-1080p-output", &ConfigOptions::report_1080p_output},
     {"--no-trophy-notifications", &ConfigOptions::trophy_enabled, false},
     {"--perf-overlay", &ConfigOptions::perf_overlay_enabled},
     {"--playgo-hack", &ConfigOptions::playgo_hack_enabled},

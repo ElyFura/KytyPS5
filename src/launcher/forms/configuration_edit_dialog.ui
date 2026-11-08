@@ -550,6 +550,13 @@ May cause rendering errors in games that blend onto such scratch data.</string><
             <property name="text"><string>Relaxed render-target aliasing (faster)</string></property>
            </widget>
           </item>
+          <item>
+           <widget class="QCheckBox" name="checkBox_report_1080p_output">
+            <property name="toolTip"><string>Tells the game its video output is 1080p instead of 4K.
+Games that size their rendering by the output then render far fewer pixels (faster on weaker GPUs).</string></property>
+            <property name="text"><string>Report 1080p video output (faster)</string></property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

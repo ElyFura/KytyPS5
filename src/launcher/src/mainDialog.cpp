@@ -273,6 +273,7 @@ static QStringList CreateEmulatorArgs(const Configuration& info) {
 	AddFlag(args, info.sync_raw_image_buffers, "--sync-raw-image-buffers");
 	AddFlag(args, !info.lds_wave_sync_enabled, "--no-lds-wave-sync");
 	AddFlag(args, info.relaxed_target_aliasing, "--relaxed-target-aliasing");
+	AddFlag(args, info.report_1080p_output, "--report-1080p-output");
 	AddFlag(args, !info.trophy_enabled, "--no-trophy-notifications");
 	args << "--trophy-duration" << QString::number(info.trophy_duration_seconds);
 	AddFlag(args, info.perf_overlay_enabled, "--perf-overlay");
