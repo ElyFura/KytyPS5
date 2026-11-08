@@ -12,7 +12,9 @@
 #include "graphics/host_gpu/renderer/cache/streamBuffer.h"
 
 #include <array>
+#include <atomic>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <utility>
@@ -91,6 +93,8 @@ public:
 	void                   QueueBdaSync(uint64_t vaddr, uint64_t size);
 	[[nodiscard]] RangeSet TakeBdaSync();
 	void               RunGarbageCollector();
+	// Releases readback windows whose asynchronous downloads have reached guest memory.
+	void               RetirePendingReadbacks();
 
 private:
 	friend struct BufferCacheTestAccess;
@@ -125,7 +129,22 @@ private:
 	[[nodiscard]] bool SynchronizeBufferFromImage(Buffer& buffer, uint64_t vaddr, uint64_t size);
 	// Synchronous downloads publish before returning; asynchronous callers wait before reuse.
 	template <bool async>
-	[[nodiscard]] bool DownloadBufferMemory(Buffer& buffer, uint64_t vaddr, uint64_t size);
+	[[nodiscard]] bool DownloadBufferMemory(Buffer& buffer, uint64_t vaddr, uint64_t size,
+	                                        std::shared_ptr<std::atomic_bool> published = {});
+	[[nodiscard]] static std::pair<uint64_t, uint64_t> ReadbackWindow(const Buffer& buffer,
+	                                                                  uint64_t vaddr, uint64_t size);
+	// Completes pending downloads overlapping the range: waits for them, then releases the
+	// windows the GPU has not written again since.
+	void CompletePendingReadbacks(uint64_t vaddr, uint64_t size);
+	[[nodiscard]] bool HasPendingReadback(uint64_t vaddr, uint64_t size) const;
+	void ReleasePendingReadback(uint64_t start, uint64_t end);
+
+	struct PendingReadback {
+		uint64_t                          start = 0;
+		uint64_t                          end   = 0;
+		uint64_t                          tick  = 0;
+		std::shared_ptr<std::atomic_bool> published;
+	};
 	void               ForgetColorMetadataChecks(uint64_t vaddr, uint64_t size);
 
 	GraphicContext&                                   m_graphics;
@@ -138,6 +157,7 @@ private:
 	BufferMap                                         m_buffers;
 	PageTable                                         m_page_table;
 	RangeSet                                          m_gpu_modified_ranges;
+	std::vector<PendingReadback>                      m_pending_readbacks;
 	// One per TileManager::ColorClearSlots key slot.
 	std::array<RangeSet, 8>                           m_checked_color_metadata;
 	MemoryTracker                                     m_memory_tracker;

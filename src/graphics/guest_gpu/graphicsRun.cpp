@@ -205,9 +205,11 @@ void CommandProcessor::ApplyContextStateOperation(ContextStateOperation operatio
 
 void CommandProcessor::BufferInit() {
 	GetScheduler().Begin(m_ctx, m_ucfg, m_sh_ctx);
+	m_renderer.GetBufferCache().RetirePendingReadbacks();
 }
 
 void CommandProcessor::BufferFlush() {
+	m_renderer.GetBufferCache().RetirePendingReadbacks();
 	GetScheduler().Flush();
 	// The occlusion counters reach a guest that polls them without waiting for a later fence.
 	m_renderer.GetOcclusionQueries().Publish();
